@@ -122,14 +122,8 @@ public class FormPersistenceSparqlEndpoint {
         
         try {
             try (RepositoryConnection con = repositoryManager.getRepository(repositoryID).getConnection()) {
-                // TODO currently we can't execute all update operations in one transaction, see
-                // https://github.com/eclipse/rdf4j/issues/972
                 try {
-                    for (String updateString : deleteAndInserts) {
-                        Update update = SparqlOperationBuilder.<Update>create(updateString, Update.class)
-                                .resolveUser(nsRegistry.getUserIRI()).build(con);
-                        update.execute();
-                    }
+                    executeUpdatesWithRollback(con, deleteAndInserts);
                     logger.info("Updating repository: "+repositoryID);
                     /* Special rule for the FieldCategories authority */
                     if (graph.equals("http://www.researchspace.org/resource/system/FieldCategories"))
@@ -176,8 +170,6 @@ public class FormPersistenceSparqlEndpoint {
                         }
                     }
                 } catch (Exception e) {
-                    // con.rollback();
-                    // TODO it also means that we can't have rollbacks in case of error
                     throw e;
                 }
               
@@ -199,6 +191,25 @@ public class FormPersistenceSparqlEndpoint {
             logger.error("Error while executing SPARQL updates for forms: {} ", e.getMessage());
             logger.debug("Details: {} ", e);
             return Response.serverError().entity(e.getMessage()).build();
+        }
+    }
+
+    private void executeUpdatesWithRollback(RepositoryConnection con, List<String> updates) throws Exception {
+        con.begin();
+        try {
+            for (String updateString : updates) {
+                Update update = SparqlOperationBuilder.<Update>create(updateString, Update.class)
+                        .resolveUser(nsRegistry.getUserIRI()).build(con);
+                update.execute();
+            }
+            con.commit();
+        } catch (Exception ex) {
+            try {
+                con.rollback();
+            } catch (Exception rbEx) {
+                logger.error("Rollback failed: {}", rbEx.getMessage());
+            }
+            throw ex;
         }
     }
 
