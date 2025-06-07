@@ -79,17 +79,16 @@ public class FormPersistenceSparqlEndpoint {
         logger.debug("Received SPARQL insert and delete queries: {}", deleteAndInserts);
         try {
             try (RepositoryConnection con = repositoryManager.getRepository(repositoryID).getConnection()) {
-                // TODO currently we can't execute all update operations in one transaction, see
-                // https://github.com/eclipse/rdf4j/issues/972
+                con.begin();
                 try {
                     for (String updateString : deleteAndInserts) {
                         Update update = SparqlOperationBuilder.<Update>create(updateString, Update.class)
                                 .resolveUser(nsRegistry.getUserIRI()).build(con);
                         update.execute();
                     }
+                    con.commit();
                 } catch (Exception e) {
-                    // con.rollback();
-                    // TODO it also means that we can't have rollbacks in case of error
+                    con.rollback();
                     throw e;
                 }
 
