@@ -20,10 +20,8 @@
 package org.researchspace.junit;
 
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.SecureRandom;
 import java.util.Map;
 
 import javax.inject.Named;
@@ -56,32 +54,23 @@ import com.google.inject.Singleton;
  * @author Johannes Trame <jt@metaphacts.com>
  */
 public class ResearchSpaceGuiceTestModule extends AbstractModule {
-    private SecureRandom random = new SecureRandom();
-
-    public String nextRandom() {
-        return new BigInteger(130, random).toString(32);
-    }
 
     @Override
     protected void configure() {
-        // TODO this entire section is a ugly workaround
         try {
-            Path tempWorkingDir = FileUtils.getTempDirectory().toPath().resolve("metaphatory-" + nextRandom());
-            Files.createDirectories(tempWorkingDir);
+            // create an isolated runtime directory for test execution
+            Path runtimeDir = Files.createTempDirectory("researchspace-runtime-");
+            System.setProperty(Configuration.SYSTEM_PROPERTY_RUNTIME_DIRECTORY, runtimeDir.toString());
 
-            System.setProperty(Configuration.SYSTEM_PROPERTY_RUNTIME_DIRECTORY,
-                    tempWorkingDir.toAbsolutePath().toString());
-
-            // create data dir
-            Path dataFolder = tempWorkingDir.resolve("./data");
-            Files.createDirectories(dataFolder);
+            Files.createDirectories(runtimeDir.resolve("data"));
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try {
-                    FileUtils.deleteDirectory(tempWorkingDir.toFile());
-                    System.clearProperty(Configuration.SYSTEM_PROPERTY_RUNTIME_DIRECTORY);
+                    FileUtils.deleteDirectory(runtimeDir.toFile());
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    // ignore deletion problems during shutdown
+                } finally {
+                    System.clearProperty(Configuration.SYSTEM_PROPERTY_RUNTIME_DIRECTORY);
                 }
             }));
         } catch (IOException e) {
